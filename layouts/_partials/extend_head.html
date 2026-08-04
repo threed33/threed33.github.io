@@ -17,18 +17,19 @@
 .toc-aside { display: none; }
 
 @media (min-width: 1200px) {
-    .post-single {
+    /* 两栏只包正文区（标题/页脚仍通栏），避免 grid-row 跨行把内容顶下去 */
+    .post-body {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 250px;
         column-gap: 32px;
         align-items: start;
+        /* 目录贴到容器最右：吃掉 .main 的右侧 padding */
+        margin-right: calc(-1 * var(--gap));
     }
-    /* 正文各块（标题/meta/正文/页脚…）全部落在左列依次堆叠 */
-    .post-single > * { grid-column: 1; }
-    /* 目录钉在右列、跨全部行；随滚动吸顶 */
-    .post-single > .toc-aside {
-        grid-column: 2;
-        grid-row: 1 / -1;
+    /* 标题与正文之间的间距收紧（去掉 post-content 默认 30px 上边距） */
+    .post-body > .post-content { margin-top: 0; }
+    /* 目录在右列，随滚动吸顶 */
+    .post-body > .toc-aside {
         display: block;
         position: sticky;
         top: calc(var(--header-height) + 16px);

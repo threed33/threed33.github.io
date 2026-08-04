@@ -34,19 +34,20 @@
   {{- partial "toc.html" . }}
   {{- end }}
 
-  {{- /* ── threed33 自定义：右侧常驻目录（服务端渲染，桌面端 CSS 显示）── */ -}}
-  {{- if and (.Param "ShowToc") (ge (len (findRE "<h[2-4]" .Content)) 1) }}
-  <aside class="toc-aside" aria-label="目录">
-    <p class="toc-aside__title">目录</p>
-    {{- .TableOfContents -}}
-  </aside>
-  {{- end }}
-
   {{- if .Content }}
-  <div class="post-content md-content">
-    {{- if not (.Param "disableAnchoredHeadings") }}
-    {{- partial "anchored_headings.html" .Content -}}
-    {{- else }}{{ .Content }}{{ end }}
+  <div class="post-body">
+    <div class="post-content md-content">
+      {{- if not (.Param "disableAnchoredHeadings") }}
+      {{- partial "anchored_headings.html" .Content -}}
+      {{- else }}{{ .Content }}{{ end }}
+    </div>
+    {{- /* 右侧常驻目录：桌面端为 post-body 的第二列，服务端渲染 */ -}}
+    {{- if and (.Param "ShowToc") (ge (len (findRE "<h[2-4]" .Content)) 1) }}
+    <aside class="toc-aside" aria-label="目录">
+      <p class="toc-aside__title">目录</p>
+      {{- .TableOfContents -}}
+    </aside>
+    {{- end }}
   </div>
   {{- end }}
 
