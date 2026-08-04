@@ -1,0 +1,86 @@
+# ──────────────────────────────────────────────────────────────
+# 部署同一份 Hugo 产物到云服务器（rsync over SSH）
+#
+# ⚠ 现在用不了 —— 等你有云服务器后再配：
+#   1. 在仓库 Settings → Secrets and variables → Actions 添加：
+#        CLOUD_HOST      服务器 IP 或域名（如 1.2.3.4）
+#        CLOUD_USER      SSH 用户（如 deploy）
+#        CLOUD_SSH_KEY   ~/.ssh/id_ed25519 的私钥内容
+#        CLOUD_PATH      web 根目录（如 /var/www/threed33，不能为空或 /）
+#        CLOUD_BASE_URL  站点 URL（如 https://blog.4dollar.cn）
+#   2. 服务器上装好 nginx/caddy 指向 CLOUD_PATH，配好 HTTPS
+#   3. 在 Actions 页面手动点 "Run workflow" 触发
+# ──────────────────────────────────────────────────────────────
+name: Deploy to Cloud (rsync)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud_base_url:
+        description: "站点 baseURL（覆盖 CLOUD_BASE_URL secret，留空则用 secret）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  rsync:
+    runs-on: ubuntu-latest
+    env:
+      HUGO_VERSION: 0.164.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: ${{ env.HUGO_VERSION }}
+          extended: true
+
+      - name: Verify cloud secrets
+        env:
+          CLOUD_HOST: ${{ secrets.CLOUD_HOST }}
+          CLOUD_USER: ${{ secrets.CLOUD_USER }}
+          CLOUD_PATH: ${{ secrets.CLOUD_PATH }}
+        run: |
+          if [ -z "$CLOUD_HOST" ] || [ -z "$CLOUD_USER" ] || [ -z "$CLOUD_PATH" ]; then
+            echo "::error::缺少 CLOUD_HOST / CLOUD_USER / CLOUD_PATH 之一，拒绝部署（防止 rsync --delete 写错地方）"
+            exit 1
+          fi
+          if [ "$CLOUD_PATH" = "/" ]; then
+            echo "::error::CLOUD_PATH 不能是 /（会 --delete 根目录）"
+            exit 1
+          fi
+
+      - name: Resolve baseURL
+        id: cfg
+        run: |
+          if [ -n "${{ inputs.cloud_base_url }}" ]; then
+            echo "base=${{ inputs.cloud_base_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=${{ secrets.CLOUD_BASE_URL }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build with Hugo
+        run: |
+          hugo --gc --minify --baseURL "${{ steps.cfg.outputs.base }}/"
+
+      - name: Setup SSH
+        env:
+          CLOUD_SSH_KEY: ${{ secrets.CLOUD_SSH_KEY }}
+          CLOUD_HOST: ${{ secrets.CLOUD_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CLOUD_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$CLOUD_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: rsync upload
+        run: |
+          rsync -avz --delete \
+            ./public/ \
+            ${{ secrets.CLOUD_USER }}@${{ secrets.CLOUD_HOST }}:${{ secrets.CLOUD_PATH }}/

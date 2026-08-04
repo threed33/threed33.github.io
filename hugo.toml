@@ -1,0 +1,94 @@
+# ──────────────────────────────────────────────────────────────
+# Hugo 站点配置 · threed33.github.io
+# 主题: PaperMod (themes/PaperMod, git submodule)
+# ──────────────────────────────────────────────────────────────
+
+baseURL            = "https://threed33.github.io/"
+defaultContentLanguage = "zh-cn"
+title              = "threed33"
+theme              = "PaperMod"
+enableRobotsTXT    = true
+enableEmoji        = true
+buildDrafts        = false          # 草稿(draft: true)不发布
+buildFuture        = false
+paginate           = 10
+hasCJKLanguage     = true           # 中文/日文/韩文:正确断字、字数统计、阅读时长
+summaryLength      = 70
+
+# ── 语言 ──
+[languages]
+  [languages.zh-cn]
+    locale = "zh-cn"
+    label = "中文"
+    weight = 1
+
+# ── 站点参数 (PaperMod) ────────────────────────────────────────
+[params]
+  env              = "production"
+  defaultTheme     = "auto"         # auto / light / dark
+  Title            = "threed33"
+  description      = "threed33 的笔记与文章"
+
+  # 文章页功能开关
+  ShowReadingTime  = true           # 阅读时长
+  ShowWordCount    = true           # 字数
+  ShowBreadCrumbs  = true           # 面包屑
+  ShowPostNavLinks = true           # 上一篇/下一篇
+  ShowCodeCopyButtons = true        # 代码块复制
+  ShowShareButtons = false
+  ShowToc          = true           # ✅ 大纲 TOC
+  TocOpen          = true           # TOC 默认展开（桌面端显示在右侧）
+  UseHugoToc       = true           # 用 Hugo 原生 .TableOfContents，使下方 startLevel/endLevel 生效
+  disableSpecial1stPost = true
+
+  # 首页个人卡片
+  [params.homeInfoParams]
+    Title   = "你好 👋"
+    Content = "这里是 threed33 的博客 —— 笔记与文章。从语雀导出 markdown，push 到仓库即自动发布。"
+
+  # 社交链接(导航栏图标)
+  [[params.socialIcons]]
+    name = "github"
+    url  = "https://github.com/threed33"
+
+# ── Markdown 渲染 ──────────────────────────────────────────────
+[markup]
+  [markup.highlight]
+    codeFences   = true
+    guessSyntax  = true
+    style        = "monokai"
+    lineNos      = false
+    tabWidth     = 2
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true                 # 允许 md 内嵌原始 HTML
+  [markup.tableOfContents]          # 大纲提取范围
+    startLevel = 2
+    endLevel   = 4
+    ordered    = false
+
+# ── 输出格式:JSON 用于本地搜索 ─────────────────────────────────
+[outputs]
+  home = ["HTML", "RSS", "JSON"]
+
+# ── 导航菜单 ───────────────────────────────────────────────────
+[[menu.main]]
+  identifier = "posts"
+  name       = "文章"
+  url        = "/posts/"
+  weight     = 10
+[[menu.main]]
+  identifier = "archives"
+  name       = "归档"
+  url        = "/archives/"
+  weight     = 20
+[[menu.main]]
+  identifier = "tags"
+  name       = "标签"
+  url        = "/tags/"
+  weight     = 30
+[[menu.main]]
+  identifier = "search"
+  name       = "搜索"
+  url        = "/search/"
+  weight     = 40

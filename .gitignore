@@ -1,0 +1,13 @@
+# Hugo 构建产物
+/public/
+/resources/_gen/
+/.hugo_build.lock
+
+# 本地暂存区（导出的语雀 md 先丢这里，再 stage）
+/inbox/
+
+# 系统/编辑器
+.DS_Store
+*.log
+/.vscode/
+/.idea/
