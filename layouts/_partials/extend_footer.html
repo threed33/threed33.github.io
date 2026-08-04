@@ -1,0 +1,59 @@
+{{- /* threed33 自定义：右侧目录的滚动联动（scroll-spy）。
+     仅文章页有 .toc-aside 时生效，其余页面无操作。 */ -}}
+<script>
+(function () {
+    var aside = document.querySelector('.toc-aside');
+    if (!aside) return;
+    var nav = aside.querySelector('nav#TableOfContents') || aside.querySelector('nav');
+    if (!nav) return;
+    var links = Array.prototype.slice.call(nav.querySelectorAll('a[href^="#"]'));
+    if (!links.length) return;
+
+    var byId = {}, headings = [];
+    links.forEach(function (l) {
+        var id = decodeURIComponent(l.getAttribute('href').slice(1));
+        var h = document.getElementById(id);
+        if (h) { byId[id] = l; headings.push(h); }
+    });
+    if (!headings.length) return;
+
+    var cur = null;
+    function setActive(id) {
+        var next = byId[id];
+        if (!next || next === cur) return;
+        if (cur) cur.classList.remove('toc-active');
+        next.classList.add('toc-active');
+        cur = next;
+        /* 激活项若滚出目录视口，让它滚回可见 */
+        var r = next.getBoundingClientRect();
+        var ar = aside.getBoundingClientRect();
+        if (r.top < ar.top) aside.scrollTop -= (ar.top - r.top) + 8;
+        else if (r.bottom > ar.bottom) aside.scrollTop += (r.bottom - ar.bottom) + 8;
+    }
+
+    if ('IntersectionObserver' in window) {
+        var seen = new Set();
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) seen.add(e.target.id);
+                else seen.delete(e.target.id);
+            });
+            if (seen.size) {
+                /* 取文档顺序最靠前的一个（headings 已按文档顺序） */
+                for (var i = 0; i < headings.length; i++) {
+                    if (seen.has(headings[i].id)) { setActive(headings[i].id); break; }
+                }
+            }
+        }, { rootMargin: '-64px 0px -70% 0px', threshold: 0 });
+        headings.forEach(function (h) { io.observe(h); });
+    } else {
+        /* 无 IO：点击时高亮 */
+        links.forEach(function (l) {
+            l.addEventListener('click', function () {
+                setActive(decodeURIComponent(l.getAttribute('href').slice(1)));
+            });
+        });
+    }
+    setActive(headings[0].id);   /* 初始高亮首项 */
+})();
+</script>

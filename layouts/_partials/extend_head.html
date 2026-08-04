@@ -1,0 +1,92 @@
+{{- /* threed33 自定义：加宽正文 + 右侧常驻目录（类语雀）。
+     仅用 CSS，服务端渲染，无闪烁。JS 见 extend_footer.html。 */ -}}
+<style>
+/* ── 桌面端：正文字号加宽（720 → 820）── */
+@media (min-width: 1200px) {
+    :root {
+        --main-width: 820px;
+        --nav-width: 1150px;   /* 让顶部导航条与加宽后的文章列对齐 */
+    }
+    /* 文章页再额外加宽，给右侧目录腾出 250px */
+    .main:has(.post-single) {
+        max-width: calc(820px + 250px + 32px + var(--gap) * 2);
+    }
+}
+
+/* ── 右侧目录：窄屏默认隐藏（用顶部折叠目录）── */
+.toc-aside { display: none; }
+
+@media (min-width: 1200px) {
+    .post-single {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 250px;
+        column-gap: 32px;
+        align-items: start;
+    }
+    /* 正文各块（标题/meta/正文/页脚…）全部落在左列依次堆叠 */
+    .post-single > * { grid-column: 1; }
+    /* 目录钉在右列、跨全部行；随滚动吸顶 */
+    .post-single > .toc-aside {
+        grid-column: 2;
+        grid-row: 1 / -1;
+        display: block;
+        position: sticky;
+        top: calc(var(--header-height) + 16px);
+        max-height: calc(100vh - var(--header-height) - 32px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        padding-inline-start: 4px;
+    }
+    /* 桌面端隐藏顶部折叠目录（右侧已有） */
+    .post-single > details.toc { display: none; }
+}
+
+/* ── 目录外观 ── */
+.toc-aside__title {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--secondary);
+    letter-spacing: .04em;
+}
+.toc-aside ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.toc-aside ul ul { padding-inline-start: 14px; }   /* 二级缩进 */
+.toc-aside a {
+    display: block;
+    padding: 4px 10px;
+    margin: 1px 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--secondary);
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    border-radius: 0 4px 4px 0;
+    transition: color .15s, background .15s, border-color .15s;
+    word-break: break-word;
+}
+.toc-aside a:hover { color: var(--primary); background: var(--code-bg); }
+.toc-aside a.toc-active {
+    color: var(--primary);
+    font-weight: 600;
+    background: var(--code-bg);
+    border-left-color: var(--primary);
+}
+/* 锚点跳转避开吸顶 header */
+.post-content :is(h2, h3, h4, h5, h6) {
+    scroll-margin-top: calc(var(--header-height) + 16px);
+}
+/* webkit 细滚动条 */
+.toc-aside::-webkit-scrollbar { width: 6px; }
+.toc-aside::-webkit-scrollbar-thumb { background: var(--tertiary); border-radius: 3px; }
+.toc-aside::-webkit-scrollbar-track { background: transparent; }
+
+/* 尊重“减少动态”偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .toc-aside a { transition: none; }
+}
+</style>
