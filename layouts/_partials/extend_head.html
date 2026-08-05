@@ -10,13 +10,13 @@
 /* ── 右侧目录：默认（窄屏）隐藏，交给顶部折叠目录 ── */
 .toc-aside { display: none; }
 
-/* ── 宽屏：正文居中，目录钉在「视口最右侧」（右侧空白槽里），
-     与正文脱离 —— 正文 margin:auto 居中，目录 position:fixed 贴右沿 ── */
+/* ── 宽屏：正文居中，目录钉在「视口最左侧」（左侧空白槽里），
+     与正文脱离 —— 正文 margin:auto 居中，目录 position:fixed 贴左沿 ── */
 @media (min-width: 1340px) {
     .toc-aside {
         display: block;
         position: fixed;
-        right: 16px;
+        left: 16px;
         top: calc(var(--header-height) + 16px);
         width: 230px;
         max-height: calc(100vh - var(--header-height) - 32px);
@@ -24,7 +24,7 @@
         overscroll-behavior: contain;
         scrollbar-width: thin;
     }
-    /* 宽屏隐藏顶部折叠目录（右侧已有） */
+    /* 宽屏隐藏顶部折叠目录（左侧已有） */
     .post-single > details.toc { display: none; }
 }
 
