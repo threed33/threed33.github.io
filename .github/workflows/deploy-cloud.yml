@@ -1,15 +1,14 @@
 # ──────────────────────────────────────────────────────────────
 # 部署同一份 Hugo 产物到云服务器（rsync over SSH）
 #
-# ⚠ 现在用不了 —— 等你有云服务器后再配：
-#   1. 在仓库 Settings → Secrets and variables → Actions 添加：
-#        CLOUD_HOST      服务器 IP 或域名（如 1.2.3.4）
-#        CLOUD_USER      SSH 用户（如 deploy）
-#        CLOUD_SSH_KEY   ~/.ssh/id_ed25519 的私钥内容
-#        CLOUD_PATH      web 根目录（如 /var/www/threed33，不能为空或 /）
-#        CLOUD_BASE_URL  站点 URL（如 https://blog.4dollar.cn）
-#   2. 服务器上装好 nginx/caddy 指向 CLOUD_PATH，配好 HTTPS
-#   3. 在 Actions 页面手动点 "Run workflow" 触发
+# 触发：Actions 页面手动 "Run workflow"（workflow_dispatch）。
+# 需在仓库 Settings → Secrets and variables → Actions 配齐：
+#   CLOUD_HOST      服务器 IP 或域名（如 8.148.64.22）
+#   CLOUD_USER      SSH 用户（root 或 admin）
+#   CLOUD_SSH_KEY   无密码 ed25519 私钥全文（含 BEGIN/END 行）
+#   CLOUD_PATH      web 根目录（如 /www/wwwroot/8.148.64.22，不能为空或 /）
+#   CLOUD_BASE_URL  站点 URL（如 http://8.148.64.22，不带尾斜杠）
+# 服务器侧：宝塔建纯静态站点指向 CLOUD_PATH，安全组放行 22/80。
 # ──────────────────────────────────────────────────────────────
 name: Deploy to Cloud (rsync)
 
@@ -34,6 +33,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
+          fetch-depth: 0   # 与 deploy.yml 一致，启用 enableGitInfo 的 lastmod
 
       - name: Setup Hugo
         uses: peaceiris/actions-hugo@v3
@@ -46,9 +46,11 @@ jobs:
           CLOUD_HOST: ${{ secrets.CLOUD_HOST }}
           CLOUD_USER: ${{ secrets.CLOUD_USER }}
           CLOUD_PATH: ${{ secrets.CLOUD_PATH }}
+          CLOUD_BASE_URL: ${{ secrets.CLOUD_BASE_URL }}
+          CLOUD_SSH_KEY: ${{ secrets.CLOUD_SSH_KEY }}
         run: |
-          if [ -z "$CLOUD_HOST" ] || [ -z "$CLOUD_USER" ] || [ -z "$CLOUD_PATH" ]; then
-            echo "::error::缺少 CLOUD_HOST / CLOUD_USER / CLOUD_PATH 之一，拒绝部署（防止 rsync --delete 写错地方）"
+          if [ -z "$CLOUD_HOST" ] || [ -z "$CLOUD_USER" ] || [ -z "$CLOUD_PATH" ] || [ -z "$CLOUD_BASE_URL" ] || [ -z "$CLOUD_SSH_KEY" ]; then
+            echo "::error::缺少 CLOUD_HOST / CLOUD_USER / CLOUD_PATH / CLOUD_BASE_URL / CLOUD_SSH_KEY 之一，拒绝部署"
             exit 1
           fi
           if [ "$CLOUD_PATH" = "/" ]; then
