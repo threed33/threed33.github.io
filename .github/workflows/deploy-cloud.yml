@@ -83,6 +83,6 @@ jobs:
 
       - name: rsync upload
         run: |
-          rsync -avz --delete \
+          rsync -avz --delete --exclude='.user.ini' \
             ./public/ \
             ${{ secrets.CLOUD_USER }}@${{ secrets.CLOUD_HOST }}:${{ secrets.CLOUD_PATH }}/
