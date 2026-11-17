@@ -13,7 +13,7 @@ TocOpen: true
 
 ## 这是什么
 
-一个静态博客：Hugo 生成页面，PaperMod 主题，托管在 GitHub Pages。每篇文章右侧有大纲，顶部有搜索、归档、标签。
+一个静态博客：Hugo 生成页面，PaperMod 主题，托管在 GitHub Pages 与云服务器。宽屏下文章左侧有常驻目录（窄屏自动切换为顶部折叠目录），顶部导航涵盖文章、归档、标签、搜索与关于。
 
 ## 怎么发新文章
 
@@ -25,7 +25,7 @@ TocOpen: true
 # 把导出的 md 暂存到 inbox/，然后：
 ./scripts/stage.py inbox/我的笔记.md
 # → 自动生成 content/posts/我的笔记/index.md
-#   补好 front matter，图片下载到本地、链接改写好
+#   补好 front matter，清理多余目录/分割线，图片下载到本地并改写链接
 
 git add content/ && git commit -m "post: 我的笔记" && git push
 # → GitHub Actions 自动构建 → 几十秒后 threed33.github.io 更新
@@ -46,15 +46,15 @@ hugo new posts/新文章/index.md   # 用 archetypes/default.md 模板
 
 ## 关于语雀导出
 
-语雀导出的 md 有两个坑，`stage.py` 都帮你处理了：
+语雀导出的 md 有几个常见痛点，`stage.py` 都自动处理了：
 
-- **没有 Hugo 需要的 front matter**：脚本会自动补 `title`（取正文第一个一级标题）、`date`（取文件修改时间）等。
+- **没有 Hugo 需要的 front matter**：脚本会自动补 `title`（取正文代码块外的第一个一级标题）、`date`（取文件修改时间）并清理正文开头重复的标题与手写目录。
 - **图片是语雀 CDN 链接（会过期失效）**：脚本会把远程图片下载到文章目录、改写成相对路径；如果是从桌面客户端导出的本地 `assets/` 图片，也会一起搬进来。
 
 然后 `git push`，剩下的交给 CI。
 
 ## 接下来
 
-- [ ] 搬一批语雀笔记过来
-- [ ] （以后）部署到云服务器
+- [x] 搬语雀笔记过来
+- [x] 部署到云服务器（`deploy-cloud.yml`）
 - [ ] （可选）开 giscus 评论

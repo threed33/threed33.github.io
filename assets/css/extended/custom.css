@@ -1,0 +1,375 @@
+/* ──────────────────────────────────────────────────────────────
+ * threed33.github.io · 扩展样式表 (Hugo Pipes 自动合并、压缩、指纹化)
+ * 设计目标：简洁、直观、高可读性的技术博客（类语雀 / GitHub 阅读体验）
+ * ────────────────────────────────────────────────────────────── */
+
+:root {
+    --main-width: 800px;
+    --nav-width: 800px;
+    --toc-width: 240px;
+    --header-height: 60px;
+    --radius: 8px;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.08);
+    --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+        "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", "SFMono-Regular", Consolas,
+        "Liberation Mono", Menlo, monospace;
+}
+
+:root[data-theme="dark"] {
+    --theme: #18191c;
+    --entry: #212329;
+    --primary: #e6edf3;
+    --secondary: #9198a1;
+    --tertiary: #30363d;
+    --content: #d0d7de;
+    --code-block-bg: #1e2026;
+    --code-bg: #262932;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent-soft: rgba(88, 166, 255, 0.12);
+}
+
+/* ── 全局字体与排版微调 ─────────────────────────────────────── */
+body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+code,
+pre,
+kbd,
+samp {
+    font-family: var(--font-mono);
+}
+
+/* ── 吸顶毛玻璃导航栏 ───────────────────────────────────────── */
+.header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--theme);
+    background: color-mix(in srgb, var(--theme) 88%, transparent);
+    backdrop-filter: saturate(180%) blur(10px);
+    -webkit-backdrop-filter: saturate(180%) blur(10px);
+    border-bottom: 1px solid var(--border);
+}
+
+.nav {
+    line-height: var(--header-height);
+}
+
+#menu a {
+    font-size: 15px;
+    transition: color 0.15s ease;
+}
+
+#menu a:hover,
+#menu .active {
+    color: var(--accent);
+}
+
+/* ── 首页简介与文章列表卡片 ─────────────────────────────────── */
+.home-info {
+    margin-bottom: 24px;
+    padding: 20px 24px;
+    background: var(--entry);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.home-info .entry-content {
+    font-size: 15px;
+    color: var(--secondary);
+}
+
+.post-entry {
+    padding: 20px 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.post-entry:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.post-entry .entry-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.post-entry .entry-content {
+    margin: 8px 0 10px;
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* ── 文章元信息与分类徽标 ───────────────────────────────────── */
+.post-meta,
+.entry-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    font-size: 13.5px;
+    color: var(--secondary);
+}
+
+.meta-category {
+    display: inline-block;
+    padding: 1px 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+}
+
+/* ── 响应式目录系统：窄屏顶部可折叠 + 宽屏左侧智能锚定 ───────── */
+.toc-aside {
+    display: none;
+}
+
+.post-single > details.toc {
+    margin: 16px 0 28px;
+    padding: 10px 16px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.post-single > details.toc summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--primary);
+    user-select: none;
+}
+
+.post-single > details.toc .inner {
+    margin-top: 10px;
+    max-height: 55vh;
+    overflow-y: auto;
+    font-size: 13.5px;
+}
+
+/* 宽屏 (>= 1340px)：隐藏顶部折叠目录，启用左侧常驻目录，
+   智能锚定在居中正文左侧 36px 处（保底距视口左缘 16px），
+   即使在 2K/4K 超宽屏下也紧贴正文左侧，不贴死屏幕最左角 */
+@media (min-width: 1340px) {
+    .toc-aside {
+        display: block;
+        position: fixed;
+        left: max(16px, calc(50% - var(--main-width) / 2 - var(--toc-width) - 36px));
+        top: calc(var(--header-height) + 24px);
+        width: var(--toc-width);
+        max-height: calc(100vh - var(--header-height) - 48px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        padding-right: 6px;
+    }
+
+    .post-single > details.toc {
+        display: none;
+    }
+}
+
+.toc-aside__title {
+    margin: 0 0 8px;
+    padding-left: 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--secondary);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.toc-aside ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.toc-aside ul ul {
+    padding-inline-start: 14px;
+}
+
+.toc-aside a {
+    display: block;
+    padding: 4px 10px;
+    margin: 1px 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--secondary);
+    text-decoration: none;
+    border-left: 2px solid transparent;
+    border-radius: 0 4px 4px 0;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    word-break: break-word;
+}
+
+.toc-aside a:hover {
+    color: var(--primary);
+    background: var(--code-bg);
+}
+
+.toc-aside a.toc-active {
+    color: var(--accent);
+    font-weight: 600;
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+}
+
+.toc-aside::-webkit-scrollbar {
+    width: 5px;
+}
+
+.toc-aside::-webkit-scrollbar-thumb {
+    background: var(--tertiary);
+    border-radius: 3px;
+}
+
+.toc-aside::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+/* ── 正文排版细节（标题、引用、表格、代码、图片） ─────────────── */
+.post-title {
+    font-size: 32px;
+    line-height: 1.3;
+    margin-bottom: 10px;
+}
+
+.post-content {
+    font-size: 16px;
+    line-height: 1.8;
+    color: var(--content);
+}
+
+/* 锚点跳转避开吸顶 header */
+.post-content :is(h1, h2, h3, h4, h5, h6) {
+    scroll-margin-top: calc(var(--header-height) + 18px);
+    color: var(--primary);
+    line-height: 1.35;
+}
+
+.post-content h2 {
+    margin: 40px 0 16px;
+    padding-bottom: 8px;
+    font-size: 24px;
+    border-bottom: 1px solid var(--border);
+}
+
+.post-content h3 {
+    margin: 28px 0 12px;
+    font-size: 19px;
+}
+
+.post-content h4 {
+    margin: 22px 0 10px;
+    font-size: 16.5px;
+}
+
+/* 提示块 / 引用块（类语雀 Callout 外观） */
+.post-content blockquote {
+    margin: 20px 0;
+    padding: 12px 16px;
+    border-inline-start: 3px solid var(--accent);
+    background: var(--code-bg);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--content);
+}
+
+.post-content blockquote p:last-child {
+    margin-bottom: 0;
+}
+
+/* 行内代码与代码块 */
+.post-content :not(pre) > code {
+    padding: 2px 6px;
+    margin: 0 2px;
+    font-size: 0.875em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    word-break: break-word;
+}
+
+.post-content .highlight:not(table),
+.post-content pre {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+/* 表格美化与移动端横向滚动保护 */
+.post-content table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 14.5px;
+}
+
+.post-content table th,
+.post-content table td {
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+}
+
+.post-content table th {
+    background: var(--code-bg);
+    font-weight: 600;
+    text-align: left;
+}
+
+.post-content table tr:nth-child(even) {
+    background: color-mix(in srgb, var(--code-bg) 45%, transparent);
+}
+
+/* 图片居中与圆角阴影 */
+.post-content img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 20px auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+/* 兼容语雀导出内联深色字体在暗色模式下的可读性 */
+:root[data-theme="dark"] .post-content font[style*="color"] {
+    color: inherit !important;
+}
+
+/* ── 归档页与标签云微调 ─────────────────────────────────────── */
+.terms-tags a {
+    border: 1px solid var(--border);
+    transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.terms-tags a:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: translateY(-1px);
+}
+
+/* 尊重“减少动态”偏好 */
+@media (prefers-reduced-motion: reduce) {
+    .toc-aside a,
+    .post-entry,
+    .terms-tags a {
+        transition: none;
+    }
+}

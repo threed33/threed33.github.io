@@ -60,14 +60,17 @@ jobs:
 
       - name: Resolve baseURL
         id: cfg
+        env:
+          INPUT_BASE: ${{ inputs.cloud_base_url }}
+          SECRET_BASE: ${{ secrets.CLOUD_BASE_URL }}
         run: |
-          if [ -n "${{ inputs.cloud_base_url }}" ]; then
-            echo "base=${{ inputs.cloud_base_url }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "base=${{ secrets.CLOUD_BASE_URL }}" >> "$GITHUB_OUTPUT"
-          fi
+          RAW_BASE="${INPUT_BASE:-$SECRET_BASE}"
+          CLEAN_BASE="${RAW_BASE%/}"
+          echo "base=${CLEAN_BASE}" >> "$GITHUB_OUTPUT"
 
       - name: Build with Hugo
+        env:
+          HUGO_CACHEDIR: ${{ runner.temp }}/hugo_cache
         run: |
           hugo --gc --minify --baseURL "${{ steps.cfg.outputs.base }}/"
 

@@ -10,15 +10,18 @@ stage.py — 把语雀导出的 markdown 暂存进 Hugo 内容树。
     ./scripts/stage.py <input.md> --draft      # 以草稿发布(draft: true)
     ./scripts/stage.py <input.md> -n           # dry-run，只打印计划不写盘
 
-它做三件事
+它做四件事
 ----------
-1. 补 Hugo front matter：若无则注入。title 取正文第一个一级标题，否则取文件名；
+1. 补 Hugo front matter：若无则注入。title 取正文代码块之外的首个一级标题，否则取文件名；
    date 取已有 front matter 的 date，否则取文件 mtime（Asia/Shanghai）。
-2. 图片本地化：
+2. 正文结构清洗：
+   - 移除用于提取标题的首个 H1 及其紧邻的多余分割线（---），避免与页面主标题重复；
+   - 自动剔除语雀导出的手写「## 目录」锚点列表（站点已内置响应式目录，避免正文开头重复）。
+3. 图片本地化（含同 URL 自动去重缓存）：
    - 远程图（http/https，含语雀 cdn.nlark.com）→ 下载到文章目录 images/，改写为相对路径；
    - 本地图（源文件旁边的 assets/xxx、images/xxx 等相对引用）→ 复制进文章目录 images/，改写；
    - 下载/复制失败 → 原样保留链接并告警（不静默吞掉）。
-3. 输出为 Hugo page bundle：content/posts/<slug>/index.md (+ images/)。
+4. 输出为 Hugo page bundle：content/posts/<slug>/index.md (+ images/)。
 
 依赖：Python 3.8+，仅标准库。
 """
@@ -40,12 +43,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 POSTS_DIR = REPO_ROOT / "content" / "posts"
 TZ = _dt.timezone(_dt.timedelta(hours=8))  # Asia/Shanghai
 
-# Markdown 图片语法: ![alt](url "optional title")
-MD_IMG_RE = re.compile(r'!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
+# Markdown 图片语法：兼容 <url>、带一层括号的文件名（如 img (1).png）及可选 "title"
+MD_IMG_RE = re.compile(
+    r'!\[([^\]]*)\]\('
+    r'(?:<([^>\n]+)>|((?:[^()\s]|\([^()\s]*\))+))'
+    r'(?:\s+"[^"]*")?\)'
+)
 # HTML <img src="..."> —— 非贪婪，且要求 src 前是空白，避免误匹配 data-src 等
 HTML_IMG_RE = re.compile(r'<img[^>]*?\ssrc=["\']([^"\']+)["\']', re.IGNORECASE)
-# 一级标题
-H1_RE = re.compile(r'^#\s+(.+?)\s*$', re.MULTILINE)
+# 围栏代码块起始/结束（``` 或 ~~~）
+FENCE_RE = re.compile(r'^\s*(`{3,}|~{3,})')
+# 水平分割线（--- / *** / ___）
+HR_RE = re.compile(r'^\s*(?:-{3,}|\*{3,}|_{3,})\s*$')
+# 手写目录段落（## 目录 + 列表项 + 可选分割线）
+MANUAL_TOC_RE = re.compile(
+    r'^\s*#{2,3}\s*(?:目录|Table\s+of\s+Contents)\s*\n'
+    r'(?:[ \t]*(?:[-*+]|\d+\.)[ \t]+.+\n|\s*\n)+'
+    r'(?:[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*\n+)?',
+    re.IGNORECASE | re.MULTILINE,
+)
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".avif"}
 
@@ -104,7 +120,7 @@ def parse_front_matter(text: str) -> tuple[dict, str, bool]:
             continue
         key, val = m.group(1), m.group(2).strip()
         # 去引号
-        if val and val[0] in "\"'" and val[-1] == val[0]:
+        if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
             val = val[1:-1]
         if val.lower() in ("true", "false"):
             fm[key] = val.lower() == "true"
@@ -118,6 +134,72 @@ def parse_front_matter(text: str) -> tuple[dict, str, bool]:
     return fm, body, True
 
 
+def extract_first_h1(body: str) -> tuple[str | None, str]:
+    """
+    在围栏代码块（``` / ~~~）之外查找文档开头的第一个一级标题（# Title）。
+    仅在遇到任何二级及以下标题（##）之前提取，避免误把正文深处的注释当标题。
+    若提取成功，同时移除该行及紧随其后的首条孤立分割线（---）。
+    """
+    lines = body.splitlines(keepends=True)
+    in_fence = False
+    fence_marker = ""
+    h1_idx: int | None = None
+    h1_title: str | None = None
+
+    for idx, line in enumerate(lines):
+        m_fence = FENCE_RE.match(line)
+        if m_fence:
+            marker = m_fence.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker[0]
+            elif marker[0] == fence_marker:
+                in_fence = False
+            continue
+        if in_fence:
+            continue
+
+        # 遇到二级或更深标题仍未见 H1，说明本文无顶层 H1，停止搜索
+        if re.match(r'^#{2,6}\s+', line):
+            break
+
+        m_h1 = re.match(r'^#\s+(.+?)\s*$', line)
+        if m_h1:
+            h1_idx = idx
+            h1_title = m_h1.group(1).strip()
+            break
+
+    if h1_idx is None or not h1_title:
+        return None, body
+
+    # 移除 H1 行，并清理紧随其后的空行与单条孤立分割线
+    remaining = lines[:h1_idx] + lines[h1_idx + 1 :]
+    while remaining and not remaining[0].strip():
+        remaining.pop(0)
+    if remaining and HR_RE.match(remaining[0]):
+        remaining.pop(0)
+        while remaining and not remaining[0].strip():
+            remaining.pop(0)
+
+    return h1_title, "".join(remaining)
+
+
+def clean_body_structure(body: str, keep_toc: bool = False) -> str:
+    """清理正文开头孤立的分割线以及语雀导出的手写『## 目录』段落。"""
+    lines = body.splitlines(keepends=True)
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if lines and HR_RE.match(lines[0]):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    cleaned = "".join(lines)
+
+    if not keep_toc:
+        cleaned = MANUAL_TOC_RE.sub("", cleaned, count=1).lstrip("\n")
+    return cleaned
+
+
 def build_front_matter(fm: dict, title: str, date_str: str, draft: bool) -> str:
     """生成/补全 front matter 文本。"""
     fm.setdefault("title", title)
@@ -129,16 +211,18 @@ def build_front_matter(fm: dict, title: str, date_str: str, draft: bool) -> str:
     fm["ShowToc"] = True
     fm["TocOpen"] = True
 
-    def fmt_val(k, v):
+    def fmt_val(v) -> str:
         if isinstance(v, bool):
             return "true" if v else "false"
         if isinstance(v, list):
             if not v:
                 return "[]"
-            return "[" + ", ".join(str(x) for x in v) + "]"
+            return "[" + ", ".join('"' + str(x).replace('"', '\\"') + '"' for x in v) + "]"
         s = str(v)
+        if not s:
+            return '""'
         # 含特殊字符则加引号
-        if s and re.search(r'[:#\[\]{}"&]', s):
+        if re.search(r'[:#\[\]{}"&\s]', s):
             return '"' + s.replace('"', '\\"') + '"'
         return s
 
@@ -146,12 +230,12 @@ def build_front_matter(fm: dict, title: str, date_str: str, draft: bool) -> str:
     lines = ["---"]
     for k in order:
         if k in fm:
-            lines.append(f"{k}: {fmt_val(k, fm[k])}")
+            lines.append(f"{k}: {fmt_val(fm[k])}")
     # 其余原有键追加在后
     for k, v in fm.items():
         if k in order:
             continue
-        lines.append(f"{k}: {fmt_val(k, v)}")
+        lines.append(f"{k}: {fmt_val(v)}")
     lines.append("---")
     return "\n".join(lines) + "\n"
 
@@ -232,20 +316,28 @@ def copy_local(src_path: Path, dest_dir: Path, seen: set[str]) -> str | None:
 
 
 def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
-    """扫描正文里所有图片引用，下载/复制到 page bundle，改写链接。"""
+    """扫描正文里所有图片引用，下载/复制到 page bundle，改写链接（同 URL 自动去重复用）。"""
     seen: set[str] = set()
+    url_cache: dict[str, str] = {}
     src_root = src_dir.resolve()
     repo_root = REPO_ROOT.resolve()
 
     def rewrite(url: str) -> str:
         if url.startswith("data:"):
             return url  # 内嵌 base64，不动
+        if url in url_cache:
+            return url_cache[url]
+
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme in ("http", "https"):
             new = fetch_remote(url, dest_dir, seen)
-            return new if new else url
+            if new:
+                url_cache[url] = new
+                return new
+            return url
+
         # 相对/绝对本地路径 —— 必须落在源文件目录或仓库根内，防止路径穿越读取任意文件
-        local = url.split("?")[0].split("#")[0]
+        local = urllib.parse.unquote(url.split("?")[0].split("#")[0])
         if local.startswith("/"):
             candidate = (REPO_ROOT / local.lstrip("/")).resolve()
             allowed = repo_root
@@ -261,10 +353,12 @@ def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
         if not new:
             log(f"    ⚠ 本地图片缺失（保留原链接）: {url}")
             return url
+        url_cache[url] = new
         return new
 
     def md_repl(m: re.Match) -> str:
-        alt, url = m.group(1), m.group(2)
+        alt = m.group(1)
+        url = m.group(2) or m.group(3)
         return f"![{alt}]({rewrite(url)})"
 
     def html_repl(m: re.Match) -> str:
@@ -283,6 +377,7 @@ def stage_one(
     dry: bool,
     taken: set[str] | None = None,
     batch: bool = False,
+    keep_toc: bool = False,
 ) -> Path | None:
     if not input_file.is_file():
         log(f"✗ 不是文件: {input_file}")
@@ -291,24 +386,25 @@ def stage_one(
     text = input_file.read_text(encoding="utf-8")
     fm, body, _had_fm = parse_front_matter(text)
 
-    # 标题：已有 FM > 第一个 H1 > 文件名
-    title = fm.get("title") if isinstance(fm.get("title"), str) else None
-    h1_match = H1_RE.search(body)
-    title_from_h1 = False
+    # 标题：已有 FM > 代码块之外首个顶层 H1 > 文件名
+    title = fm.get("title") if isinstance(fm.get("title"), str) and fm.get("title") else None
+    h1_title, body_without_h1 = extract_first_h1(body)
     if not title:
-        if h1_match:
-            title = h1_match.group(1).strip()
-            title_from_h1 = True
+        if h1_title:
+            title = h1_title
+            body = body_without_h1
         else:
             title = input_file.stem
+    elif h1_title and h1_title == title:
+        # 已有 FM 标题且正文开头重复写了同名 H1，同样去掉正文中的重复 H1
+        body = body_without_h1
     title = str(title)
 
-    # 若标题取自正文首个 H1，从正文去掉它，避免与页面标题重复
-    if title_from_h1 and h1_match:
-        body = body.replace(h1_match.group(0), "", 1).lstrip("\n")
+    # 清理开头多余分割线与手写目录段落
+    body = clean_body_structure(body, keep_toc=keep_toc)
 
     # 日期：已有 FM date > 文件 mtime
-    date_str = fm.get("date") if isinstance(fm.get("date"), str) else None
+    date_str = fm.get("date") if isinstance(fm.get("date"), str) and fm.get("date") else None
     if not date_str:
         mtime = _dt.datetime.fromtimestamp(input_file.stat().st_mtime, TZ)
         date_str = mtime.strftime("%Y-%m-%dT%H:%M:%S%z")
@@ -364,6 +460,7 @@ def main() -> int:
     ap.add_argument("slug", nargs="?", help="可选：自定义 URL slug（仅单文件时生效）")
     ap.add_argument("-d", "--draft", action="store_true", help="以草稿发布(draft: true)")
     ap.add_argument("-n", "--dry-run", action="store_true", help="只打印计划，不写盘")
+    ap.add_argument("--keep-toc", action="store_true", help="保留文档内手写的『## 目录』段落")
     args = ap.parse_args()
 
     target = Path(args.input).expanduser().resolve()
@@ -384,11 +481,14 @@ def main() -> int:
             return 2
         log(f"发现 {len(md_files)} 个 md，开始处理…")
         for f in md_files:
-            r = stage_one(f, None, args.draft, args.dry_run, taken=taken, batch=True)
+            r = stage_one(
+                f, None, args.draft, args.dry_run,
+                taken=taken, batch=True, keep_toc=args.keep_toc,
+            )
             if r:
                 staged.append(r)
     else:
-        r = stage_one(target, args.slug, args.draft, args.dry_run)
+        r = stage_one(target, args.slug, args.draft, args.dry_run, keep_toc=args.keep_toc)
         if r:
             staged.append(r)
 

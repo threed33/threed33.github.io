@@ -3,75 +3,100 @@
 # 主题: PaperMod (themes/PaperMod, git submodule)
 # ──────────────────────────────────────────────────────────────
 
-baseURL            = "https://threed33.github.io/"
-defaultContentLanguage = "zh-cn"
-title              = "threed33"
-theme              = "PaperMod"
-enableRobotsTXT    = true
-enableEmoji        = true
-buildDrafts        = false          # 草稿(draft: true)不发布
-buildFuture        = false
-paginate           = 10
-hasCJKLanguage     = true           # 中文/日文/韩文:正确断字、字数统计、阅读时长
-summaryLength      = 70
+baseURL                = "https://threed33.github.io/"
+defaultContentLanguage = "zh"              # 对应 PaperMod 内置 i18n/zh.yaml 中文翻译
+title                  = "threed33"
+theme                  = "PaperMod"
+enableRobotsTXT        = true
+enableEmoji            = true
+enableGitInfo          = true              # 读取 Git 提交时间作为文章 .Lastmod
+buildDrafts            = false             # 草稿(draft: true)不发布
+buildFuture            = false
+hasCJKLanguage         = true              # 中文/日文/韩文：正确断字、字数统计、阅读时长
+summaryLength          = 80
 
-# ── 语言 ──
+[pagination]
+  pagerSize = 10
+
+[frontmatter]
+  lastmod = ["lastmod", ":git", "date"]
+
+# ── 语言 ───────────────────────────────────────────────────────
 [languages]
-  [languages.zh-cn]
+  [languages.zh]
+    label  = "中文"
     locale = "zh-cn"
-    label = "中文"
     weight = 1
 
 # ── 站点参数 (PaperMod) ────────────────────────────────────────
 [params]
   env              = "production"
-  defaultTheme     = "auto"         # auto / light / dark
+  defaultTheme     = "auto"                # auto / light / dark
   Title            = "threed33"
-  description      = "threed33 的笔记与文章"
+  author           = "threed33"
+  description      = "threed33 的技术笔记与文章"
+  DateFormat       = "2006-01-02"          # 统一简洁日期格式：YYYY-MM-DD
+  mainSections     = ["posts"]
 
-  # 文章页功能开关
-  ShowReadingTime  = true           # 阅读时长
-  ShowWordCount    = true           # 字数
-  ShowBreadCrumbs  = true           # 面包屑
-  ShowPostNavLinks = true           # 上一篇/下一篇
-  ShowCodeCopyButtons = true        # 代码块复制
-  ShowShareButtons = false
-  ShowToc          = true           # ✅ 大纲 TOC
-  TocOpen          = true           # TOC 默认展开（桌面端显示在右侧）
-  UseHugoToc       = true           # 用 Hugo 原生 .TableOfContents，使下方 startLevel/endLevel 生效
-  disableSpecial1stPost = true
+  # 文章与列表页功能开关
+  ShowReadingTime                = true    # 阅读时长
+  ShowWordCount                  = true    # 字数统计
+  ShowLastMod                    = true    # 跨天更新时显示最后修改日期
+  ShowBreadCrumbs                = true    # 面包屑导航
+  ShowPostNavLinks               = true    # 上一篇 / 下一篇
+  ShowCodeCopyButtons            = true    # 代码块一键复制
+  ShowShareButtons               = false
+  ShowPageNums                   = true    # 分页显示页码
+  ShowRssButtonInSectionTermList = true
+  ShowToc                        = true    # 文章目录 TOC（宽屏左侧常驻 / 窄屏顶部可折叠）
+  TocOpen                        = true    # 宽屏侧栏默认展开
+  UseHugoToc                     = true    # 使用 Hugo 原生 .TableOfContents
+  disableSpecial1stPost          = true
 
   # 首页个人卡片
   [params.homeInfoParams]
     Title   = "你好 👋"
-    Content = "这里是 threed33 的博客 —— 笔记与文章。从语雀导出 markdown，push 到仓库即自动发布。"
+    Content = "这里是 threed33 的技术博客 —— 记录网络安全、攻防实践与日常学习笔记。"
 
-  # 社交链接(导航栏图标)
+  # 社交与订阅链接（首页卡片底部图标）
   [[params.socialIcons]]
     name = "github"
     url  = "https://github.com/threed33"
+  [[params.socialIcons]]
+    name = "rss"
+    url  = "/index.xml"
+
+  # 本地搜索配置（针对中文单字/短词检索调优）
+  [params.fuseOpts]
+    isCaseSensitive    = false
+    shouldSort         = true
+    location           = 0
+    distance           = 1000
+    threshold          = 0.3
+    minMatchCharLength = 1
+    keys               = ["title", "permalink", "summary", "content"]
 
 # ── Markdown 渲染 ──────────────────────────────────────────────
 [markup]
   [markup.highlight]
-    codeFences   = true
-    guessSyntax  = true
-    style        = "monokai"
-    lineNos      = false
-    tabWidth     = 2
+    codeFences  = true
+    guessSyntax = true
+    style       = "monokai"
+    lineNos     = false
+    tabWidth    = 2
   [markup.goldmark]
     [markup.goldmark.renderer]
-      unsafe = true                 # 允许 md 内嵌原始 HTML
-  [markup.tableOfContents]          # 大纲提取范围
+      unsafe = true                        # 允许 md 内嵌原始 HTML
+  [markup.tableOfContents]                 # 大纲提取范围（H2 ~ H4）
     startLevel = 2
     endLevel   = 4
     ordered    = false
 
-# ── 输出格式:JSON 用于本地搜索 ─────────────────────────────────
+# ── 输出格式：JSON 用于本地搜索 ────────────────────────────────
 [outputs]
   home = ["HTML", "RSS", "JSON"]
 
-# ── 导航菜单 ───────────────────────────────────────────────────
+# ── 顶部导航菜单 ───────────────────────────────────────────────
 [[menu.main]]
   identifier = "posts"
   name       = "文章"
@@ -92,3 +117,8 @@ summaryLength      = 70
   name       = "搜索"
   url        = "/search/"
   weight     = 40
+[[menu.main]]
+  identifier = "about"
+  name       = "关于"
+  url        = "/about/"
+  weight     = 50

@@ -1,0 +1,18 @@
+{{- /* 响应式目录（服务端渲染）：
+     - 窄屏 (< 1340px)：顶部可折叠 <details class="toc">（默认收起，避免长文目录霸占首屏）
+     - 宽屏 (>= 1340px)：左侧常驻 <aside class="toc-aside">（配合 extend_footer.html 滚动高亮）
+     - 移除窄屏 nav 的 id="TableOfContents"，保证全页 DOM ID 唯一 */ -}}
+{{- if ge (len (findRE "<h[2-4]" .Content)) 1 -}}
+<details class="toc" {{- if (.Param "TocMobileOpen") }} open{{- end }}>
+  <summary accesskey="c" title="(Alt + C)">
+    <span class="title">{{- i18n "toc" | default "目录" }}</span>
+  </summary>
+  <div class="inner">
+    {{- replace .TableOfContents `id="TableOfContents"` `class="toc-mobile-nav"` | safeHTML -}}
+  </div>
+</details>
+<aside class="toc-aside" aria-label="{{- i18n "toc" | default "目录" }}">
+  <p class="toc-aside__title">{{- i18n "toc" | default "目录" }}</p>
+  {{- .TableOfContents -}}
+</aside>
+{{- end -}}
