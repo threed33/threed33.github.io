@@ -23,7 +23,7 @@
 {{- $categories := .Language.Params.Taxonomies.category | default "categories" }}
 {{- with ($.GetTerms $categories) }}
   {{- range . }}
-    {{- $meta = $meta | append (printf "<span class='meta-category'>%s</span>" (.LinkTitle | htmlEscape)) }}
+    {{- $meta = $meta | append (printf "<a class='meta-category' href='%s'>%s</a>" (.RelPermalink | htmlEscape) (.LinkTitle | htmlEscape)) }}
   {{- end }}
 {{- end }}
 

@@ -20,6 +20,7 @@
 │   ├── extend_head.html           # Head 扩展钩子说明
 │   └── extend_footer.html         # 左侧常驻目录双向滚动高亮（rAF scroll-spy）
 ├── scripts/stage.py               # ★ 语雀 Markdown → Hugo Page Bundle 预处理脚本
+├── static/                        # 站点图标（favicon / apple-touch-icon）与默认 OG 封面图
 ├── themes/PaperMod/               # 主题（git submodule，零侵入）
 ├── .github/workflows/
 │   ├── deploy.yml                 # push → 构建 → GitHub Pages
@@ -38,6 +39,7 @@ mkdir -p inbox && mv ~/Downloads/笔记.md inbox/
 
 # 2. stage：补 front matter + 结构清洗 + 图片本地化
 ./scripts/stage.py inbox/笔记.md
+#   短 URL：./scripts/stage.py inbox/笔记.md my-note-slug
 #   批量：./scripts/stage.py inbox/
 #   试跑：./scripts/stage.py inbox/笔记.md -n
 #   草稿：./scripts/stage.py inbox/笔记.md --draft
@@ -49,8 +51,8 @@ git add content/ && git commit -m "post: 笔记" && git push
 `stage.py` 自动完成四件事：
 1. **补全 Front Matter**：`title` 取正文代码块外的首个一级标题，`date` 取文件修改时间（`Asia/Shanghai`）。
 2. **清理冗余结构**：移除用于提取标题的首个 `# H1` 及其下方的孤立分割线 `---`，并自动剔除语雀内手写的 `## 目录` 列表（避免与站点左侧常驻目录重复；如需保留可加 `--keep-toc`）。
-3. **图片本地化与去重**：远程图（语雀 CDN 等，内置 `Referer` 防盗链重试与类型校验）下载到文章目录 `images/`，本地 `assets/` 图复制进来，链接改写为相对路径；同一篇内相同图片 URL 自动去重复用。
-4. **安全兜底**：失败的图片保留原链接并打印告警，绝不静默丢图。
+3. **图片本地化与去重**：跳过代码块内的示例链接，将正文中的远程图（语雀 CDN 等，内置 `Referer` 防盗链重试与类型/魔数校验）下载到文章目录 `images/`，本地 `assets/` 图复制进来，链接改写为相对路径；同一篇内相同图片 URL 自动去重复用。
+4. **安全兜底**：暂存时先落临时目录，全部成功再替换旧 `images/`；失败的图片保留原链接并打印告警，绝不静默丢图。
 
 ### 从零写
 
@@ -63,6 +65,9 @@ git add content/ && git commit -m "post: 新文章" && git push
 ## 本地预览
 
 ```bash
+# 首次克隆仓库后需先初始化 PaperMod 主题子模块
+git submodule update --init --recursive
+
 hugo server -D   # -D 包含草稿；浏览器访问 http://localhost:1313
 ```
 
