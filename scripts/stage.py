@@ -52,7 +52,11 @@ MD_IMG_RE = re.compile(
 # HTML <img src="..."> —— 非贪婪，且要求 src 前是空白，避免误匹配 data-src 等
 HTML_IMG_RE = re.compile(r'<img[^>]*?\ssrc=["\']([^"\']+)["\']', re.IGNORECASE)
 # 围栏代码块起始/结束（``` 或 ~~~）
-FENCE_RE = re.compile(r'^\s*(`{3,}|~{3,})')
+FENCE_RE = re.compile(r'^[ \t]*(`{3,}|~{3,})(.*)$')
+# 行内代码 span（用于避免改写行内反引号里的示例图片语法）
+INLINE_CODE_RE = re.compile(r'(`+)([^\n]*?)\1')
+# Front Matter 边界（必须以独立 --- 行起止）
+FM_BLOCK_RE = re.compile(r'\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)', re.DOTALL)
 # 水平分割线（--- / *** / ___）
 HR_RE = re.compile(r'^\s*(?:-{3,}|\*{3,}|_{3,})\s*$')
 # 手写目录段落（## 目录 + 列表项 + 可选分割线）
@@ -98,40 +102,80 @@ def safe_filename(name: str, ext: str, seen: set[str]) -> str:
     return candidate
 
 
+def _unquote(val: str) -> str:
+    val = val.strip()
+    if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
+        return val[1:-1]
+    return val
+
+
 def parse_front_matter(text: str) -> tuple[dict, str, bool]:
     """
     返回 (已有FM字典, 正文, 是否存在FM)。
-    只解析轻量 YAML（key: value、列表用 [a, b]）；够用即可。
+    支持单行 key: value、行内列表 [a, b] 与多行 YAML 列表（- item），
+    并校验结构防止把正文开头的两条分割线 --- 误判为 Front Matter。
     """
-    if not text.startswith("---"):
+    m_block = FM_BLOCK_RE.match(text)
+    if not m_block:
         return {}, text, False
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}, text, False
-    fm_raw = parts[1].strip("\n")
-    body = parts[2].lstrip("\n") if len(parts) == 3 else ""
+
+    fm_raw = (m_block.group(1) or "").strip("\n")
+    body = text[m_block.end():].lstrip("\n")
     fm: dict = {}
-    for line in fm_raw.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    current_list_key: str | None = None
+
+    for raw_line in fm_raw.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        m = re.match(r'^([A-Za-z0-9_]+)\s*:\s*(.*)$', line)
-        if not m:
+        m_item = re.match(r'^-\s+(.*)$', stripped)
+        if m_item and current_list_key is not None:
+            if not isinstance(fm[current_list_key], list):
+                fm[current_list_key] = []
+            item_val = _unquote(m_item.group(1))
+            if item_val:
+                fm[current_list_key].append(item_val)
             continue
-        key, val = m.group(1), m.group(2).strip()
-        # 去引号
-        if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
-            val = val[1:-1]
-        if val.lower() in ("true", "false"):
+
+        m_kv = re.match(r'^([A-Za-z0-9_]+)\s*:\s*(.*)$', stripped)
+        if not m_kv:
+            # 存在非注释、非合法 YAML 键值对的行，说明这是正文而非 Front Matter
+            return {}, text, False
+
+        key, val = m_kv.group(1), m_kv.group(2).strip()
+        current_list_key = None
+        if not val:
+            # 默认空字符串，若后续紧跟 `- item` 则自动转为列表
+            fm[key] = ""
+            current_list_key = key
+        elif val.lower() in ("true", "false"):
             fm[key] = val.lower() == "true"
         elif val.startswith("[") and val.endswith("]"):
-            # flow list: [a, b, c]
             inner = val[1:-1].strip()
-            items = [x.strip().strip("\"'") for x in inner.split(",")] if inner else []
+            items = [_unquote(x) for x in inner.split(",")] if inner else []
             fm[key] = [x for x in items if x]
         else:
-            fm[key] = val
+            fm[key] = _unquote(val)
+
     return fm, body, True
+
+
+def _update_fence_state(
+    line: str, in_fence: bool, fence_char: str, fence_len: int
+) -> tuple[bool, str, int, bool]:
+    """按 CommonMark 规则判断围栏代码块起止；返回 (in_fence, fence_char, fence_len, is_fence_line)。"""
+    m = FENCE_RE.match(line)
+    if not m:
+        return in_fence, fence_char, fence_len, False
+    marker, rest = m.group(1), m.group(2)
+    ch, length = marker[0], len(marker)
+    if not in_fence:
+        if ch == "`" and "`" in rest:
+            return in_fence, fence_char, fence_len, False
+        return True, ch, length, True
+    if ch == fence_char and length >= fence_len and not rest.strip():
+        return False, "", 0, True
+    return in_fence, fence_char, fence_len, False
 
 
 def extract_first_h1(body: str) -> tuple[str | None, str]:
@@ -142,21 +186,16 @@ def extract_first_h1(body: str) -> tuple[str | None, str]:
     """
     lines = body.splitlines(keepends=True)
     in_fence = False
-    fence_marker = ""
+    fence_char = ""
+    fence_len = 0
     h1_idx: int | None = None
     h1_title: str | None = None
 
     for idx, line in enumerate(lines):
-        m_fence = FENCE_RE.match(line)
-        if m_fence:
-            marker = m_fence.group(1)
-            if not in_fence:
-                in_fence = True
-                fence_marker = marker[0]
-            elif marker[0] == fence_marker:
-                in_fence = False
-            continue
-        if in_fence:
+        in_fence, fence_char, fence_len, is_fence_line = _update_fence_state(
+            line, in_fence, fence_char, fence_len
+        )
+        if is_fence_line or in_fence:
             continue
 
         # 遇到二级或更深标题仍未见 H1，说明本文无顶层 H1，停止搜索
@@ -208,8 +247,7 @@ def build_front_matter(fm: dict, title: str, date_str: str, draft: bool) -> str:
     fm.setdefault("description", "")
     fm.setdefault("tags", [])
     fm.setdefault("categories", [])
-    fm["ShowToc"] = True
-    fm["TocOpen"] = True
+    fm.setdefault("ShowToc", True)
 
     def fmt_val(v) -> str:
         if isinstance(v, bool):
@@ -226,7 +264,7 @@ def build_front_matter(fm: dict, title: str, date_str: str, draft: bool) -> str:
             return '"' + s.replace('"', '\\"') + '"'
         return s
 
-    order = ["title", "date", "draft", "description", "tags", "categories", "ShowToc", "TocOpen"]
+    order = ["title", "date", "draft", "description", "tags", "categories", "ShowToc"]
     lines = ["---"]
     for k in order:
         if k in fm:
@@ -259,8 +297,34 @@ def ext_from_url(url: str, content_type: str | None = None) -> str:
     return ".png"  # 默认
 
 
-def fetch_remote(url: str, dest_dir: Path, seen: set[str]) -> str | None:
-    """下载远程图片到 dest_dir/images，返回新的相对路径；失败/非图片返回 None。"""
+def _is_valid_image(data: bytes, content_type: str) -> bool:
+    """校验响应是否为真实图片（排除 HTML 登录页 / JSON 报错等伪 200 响应）。"""
+    if not data or len(data) < 32:
+        return False
+    ct = content_type.split(";", 1)[0].strip().lower()
+    head = data[:512].lstrip()
+    head_low = head.lower()
+
+    # 明确拒绝 HTML / JSON / 纯文本报错体
+    if head_low.startswith((b"<!doctype", b"<html", b"<head", b"<body", b"{", b"[")):
+        return False
+    if ct and not ct.startswith("image/") and ct != "application/octet-stream":
+        return False
+
+    # 检查常见图片魔数或 SVG 标记
+    if data.startswith((b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a", b"BM", b"\x00\x00\x01\x00")):
+        return True
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return True
+    if len(data) >= 12 and data[4:8] == b"ftyp" and data[8:12] in (b"avif", b"avis", b"heic", b"heix", b"mif1"):
+        return True
+    if b"<svg" in head_low:
+        return True
+    return ct.startswith("image/")
+
+
+def fetch_remote(url: str, images_dir: Path, seen: set[str]) -> str | None:
+    """下载远程图片到 images_dir，返回新的相对路径；失败/非图片返回 None。"""
     data: bytes | None = None
     ctype = ""
     try:
@@ -268,8 +332,8 @@ def fetch_remote(url: str, dest_dir: Path, seen: set[str]) -> str | None:
         with urllib.request.urlopen(req, timeout=20) as resp:
             data = resp.read()
             ctype = resp.headers.get("Content-Type", "")
-            # 语雀/部分 CDN 需要 referer，疑似非图片时带 referer 重试一次
-            if not data or len(data) < 64 or "text" in ctype.lower() or "html" in ctype.lower():
+            # 语雀/部分 CDN 需要 referer，校验不通过时带 referer 重试一次
+            if not _is_valid_image(data, ctype):
                 raise IOError("suspected non-image body")
     except Exception:
         # 带 Referer 重试（语雀 CDN 常见）
@@ -288,41 +352,44 @@ def fetch_remote(url: str, dest_dir: Path, seen: set[str]) -> str | None:
             log(f"    ⚠ 下载失败（保留原链接）: {url}  ({e})")
             return None
 
-    # 重试后仍要校验：HTML/文本（如过期的 CDN 登录页，HTTP 200 但 body 是 HTML）不能当图片
-    if not data or len(data) < 64 or "text" in ctype.lower() or "html" in ctype.lower():
+    if not _is_valid_image(data, ctype):
         log(f"    ⚠ 响应不是图片（保留原链接）: {url}  (type={ctype or '?'})")
         return None
 
     parsed = urllib.parse.urlparse(url)
     base_name = Path(parsed.path).name or hashlib.md5(url.encode()).hexdigest()[:12]
     ext = ext_from_url(url, ctype)
-    images_dir = dest_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     fname = safe_filename(Path(base_name).stem or "image", ext, seen)
     (images_dir / fname).write_bytes(data)
     return f"images/{fname}"
 
 
-def copy_local(src_path: Path, dest_dir: Path, seen: set[str]) -> str | None:
-    """把本地图片复制进文章目录 images/，返回新相对路径；文件不存在返回 None。"""
+def copy_local(src_path: Path, images_dir: Path, seen: set[str]) -> str | None:
+    """把本地图片复制进 images_dir，返回新相对路径；文件不存在返回 None。"""
     if not src_path.is_file():
         return None
     ext = src_path.suffix.lower() or ".png"
-    images_dir = dest_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     fname = safe_filename(src_path.stem, ext, seen)
     shutil.copy2(src_path, images_dir / fname)
     return f"images/{fname}"
 
 
-def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
-    """扫描正文里所有图片引用，下载/复制到 page bundle，改写链接（同 URL 自动去重复用）。"""
+def localize_images(body: str, src_dir: Path, images_dir: Path) -> tuple[str, bool]:
+    """
+    扫描正文非代码块区域里的图片引用，下载/复制到 images_dir，
+    并改写为相对路径 images/<fname>（同 URL 自动去重复用）。
+    返回 (改写后的正文, 是否存在失败的图片)。
+    """
     seen: set[str] = set()
     url_cache: dict[str, str] = {}
+    had_failures = False
     src_root = src_dir.resolve()
     repo_root = REPO_ROOT.resolve()
 
     def rewrite(url: str) -> str:
+        nonlocal had_failures
         if url.startswith("data:"):
             return url  # 内嵌 base64，不动
         if url in url_cache:
@@ -330,10 +397,11 @@ def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
 
         parsed = urllib.parse.urlparse(url)
         if parsed.scheme in ("http", "https"):
-            new = fetch_remote(url, dest_dir, seen)
+            new = fetch_remote(url, images_dir, seen)
             if new:
                 url_cache[url] = new
                 return new
+            had_failures = True
             return url
 
         # 相对/绝对本地路径 —— 必须落在源文件目录或仓库根内，防止路径穿越读取任意文件
@@ -348,10 +416,12 @@ def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
             candidate.relative_to(allowed)  # 不在允许范围内 → ValueError
         except ValueError:
             log(f"    ⚠ 路径越界，拒绝读取（保留原链接）: {url}")
+            had_failures = True
             return url
-        new = copy_local(candidate, dest_dir, seen)
+        new = copy_local(candidate, images_dir, seen)
         if not new:
             log(f"    ⚠ 本地图片缺失（保留原链接）: {url}")
+            had_failures = True
             return url
         url_cache[url] = new
         return new
@@ -365,9 +435,38 @@ def localize_images(body: str, src_dir: Path, dest_dir: Path) -> str:
         url = m.group(1)
         return m.group(0).replace(url, rewrite(url))
 
-    body = MD_IMG_RE.sub(md_repl, body)
-    body = HTML_IMG_RE.sub(html_repl, body)
-    return body
+    def rewrite_plain_segment(seg: str) -> str:
+        seg = MD_IMG_RE.sub(md_repl, seg)
+        seg = HTML_IMG_RE.sub(html_repl, seg)
+        return seg
+
+    def rewrite_line(line: str) -> str:
+        # 跳过行内反引号 `...` 包裹的示例语法
+        parts: list[str] = []
+        last = 0
+        for m in INLINE_CODE_RE.finditer(line):
+            if m.start() > last:
+                parts.append(rewrite_plain_segment(line[last:m.start()]))
+            parts.append(m.group(0))
+            last = m.end()
+        if last < len(line):
+            parts.append(rewrite_plain_segment(line[last:]))
+        return "".join(parts)
+
+    out_lines: list[str] = []
+    in_fence = False
+    fence_char = ""
+    fence_len = 0
+    for line in body.splitlines(keepends=True):
+        in_fence, fence_char, fence_len, is_fence_line = _update_fence_state(
+            line, in_fence, fence_char, fence_len
+        )
+        if is_fence_line or in_fence:
+            out_lines.append(line)
+        else:
+            out_lines.append(rewrite_line(line))
+
+    return "".join(out_lines), had_failures
 
 
 def stage_one(
@@ -383,7 +482,8 @@ def stage_one(
         log(f"✗ 不是文件: {input_file}")
         return None
 
-    text = input_file.read_text(encoding="utf-8")
+    # utf-8-sig 自动剥离 Windows/语雀可能带入的 BOM；统一换行符为 LF
+    text = input_file.read_text(encoding="utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
     fm, body, _had_fm = parse_front_matter(text)
 
     # 标题：已有 FM > 代码块之外首个顶层 H1 > 文件名
@@ -426,15 +526,31 @@ def stage_one(
     if out_md.exists():
         log(f"⚠ 已存在，覆盖: {out_md.relative_to(REPO_ROOT)}")
 
-    # 图片本地化（基于源文件所在目录解析相对图片）。dry-run 绝不落盘。
+    # 图片本地化（先落临时目录，成功后原子替换旧 images/，避免断链时误删旧图）。dry-run 绝不落盘。
     if dry:
         new_body = body
     else:
-        # 重新暂存时清掉上次的图片残留，保证 bundle 只含当前正文引用的图
-        stale_images = dest_dir / "images"
-        if stale_images.is_dir():
-            shutil.rmtree(stale_images, ignore_errors=True)
-        new_body = localize_images(body, input_file.parent, dest_dir)
+        final_images = dest_dir / "images"
+        tmp_images = dest_dir / ".images.tmp"
+        if tmp_images.exists():
+            shutil.rmtree(tmp_images, ignore_errors=True)
+
+        new_body, had_failures = localize_images(body, input_file.parent, tmp_images)
+
+        if not had_failures:
+            if final_images.exists():
+                shutil.rmtree(final_images, ignore_errors=True)
+            if tmp_images.is_dir():
+                tmp_images.rename(final_images)
+        else:
+            if final_images.is_dir():
+                if tmp_images.is_dir():
+                    for item in tmp_images.iterdir():
+                        shutil.move(str(item), str(final_images / item.name))
+                    shutil.rmtree(tmp_images, ignore_errors=True)
+                log("    ⚠ 部分图片失败，已保留原有 images/ 目录避免丢失本地缓存")
+            elif tmp_images.is_dir():
+                tmp_images.rename(final_images)
 
     new_fm = build_front_matter(dict(fm), title, date_str, draft)
     output = new_fm + "\n" + new_body.lstrip("\n")

@@ -6,7 +6,6 @@ description: "第一篇日志 —— 这是什么、怎么发新文章、语雀 
 tags: ["公告", "建站"]
 categories: ["随笔"]
 ShowToc: true
-TocOpen: true
 ---
 
 博客搭好了。这篇同时是个「使用说明」。
@@ -40,7 +39,7 @@ git add content/ && git commit -m "post: 我的笔记" && git push
 **2. 从零写**
 
 ```bash
-hugo new posts/新文章/index.md   # 用 archetypes/default.md 模板
+hugo new content posts/新文章/index.md   # 用 archetypes/default.md 模板
 # 编辑 content/posts/新文章/index.md，写完把 draft 改成 false
 ```
 

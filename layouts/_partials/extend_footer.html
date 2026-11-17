@@ -11,7 +11,9 @@
 
     var byId = {}, headings = [];
     links.forEach(function (l) {
-        var id = decodeURIComponent(l.getAttribute('href').slice(1));
+        var raw = l.getAttribute('href').slice(1);
+        var id = raw;
+        try { id = decodeURIComponent(raw); } catch (e) {}
         var h = document.getElementById(id);
         if (h) { byId[id] = l; headings.push(h); }
     });
@@ -39,12 +41,18 @@
 
     function updateActive() {
         ticking = false;
-        var activeId = headings[0].id;
-        for (var i = 0; i < headings.length; i++) {
-            if (headings[i].getBoundingClientRect().top <= OFFSET) {
-                activeId = headings[i].id;
-            } else {
-                break;
+        /* 窄屏下 .toc-aside 处于 display: none，跳过 DOM 几何计算 */
+        if (window.getComputedStyle(aside).display === 'none') return;
+
+        var atBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 2);
+        var activeId = atBottom ? headings[headings.length - 1].id : headings[0].id;
+        if (!atBottom) {
+            for (var i = 0; i < headings.length; i++) {
+                if (headings[i].getBoundingClientRect().top <= OFFSET) {
+                    activeId = headings[i].id;
+                } else {
+                    break;
+                }
             }
         }
         setActive(activeId);

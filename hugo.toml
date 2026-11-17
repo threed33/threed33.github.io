@@ -9,7 +9,9 @@ title                  = "threed33"
 theme                  = "PaperMod"
 enableRobotsTXT        = true
 enableEmoji            = true
-enableGitInfo          = true              # 读取 Git 提交时间作为文章 .Lastmod
+# enableGitInfo 设为 false：避免样式或目录结构重构提交误触发所有文章“更新于”日期；
+# 实质性修订文章时在 Front Matter 显式添加 lastmod 即可显示更新日期。
+enableGitInfo          = false
 buildDrafts            = false             # 草稿(draft: true)不发布
 buildFuture            = false
 hasCJKLanguage         = true              # 中文/日文/韩文：正确断字、字数统计、阅读时长
@@ -19,7 +21,7 @@ summaryLength          = 80
   pagerSize = 10
 
 [frontmatter]
-  lastmod = ["lastmod", ":git", "date"]
+  lastmod = ["lastmod", "date"]
 
 # ── 语言 ───────────────────────────────────────────────────────
 [languages]
@@ -37,6 +39,11 @@ summaryLength          = 80
   description      = "threed33 的技术笔记与文章"
   DateFormat       = "2006-01-02"          # 统一简洁日期格式：YYYY-MM-DD
   mainSections     = ["posts"]
+  images           = ["/og-cover.png"]     # 默认 OpenGraph / 社交分享封面
+
+  [params.assets]
+    theme_color             = "#18191c"
+    msapplication_TileColor = "#18191c"
 
   # 文章与列表页功能开关
   ShowReadingTime                = true    # 阅读时长
@@ -49,7 +56,7 @@ summaryLength          = 80
   ShowPageNums                   = true    # 分页显示页码
   ShowRssButtonInSectionTermList = true
   ShowToc                        = true    # 文章目录 TOC（宽屏左侧常驻 / 窄屏顶部可折叠）
-  TocOpen                        = true    # 宽屏侧栏默认展开
+  TocMobileOpen                  = false   # 窄屏顶部目录默认折叠（由 layouts/_partials/toc.html 读取）
   UseHugoToc                     = true    # 使用 Hugo 原生 .TableOfContents
   disableSpecial1stPost          = true
 
@@ -81,7 +88,7 @@ summaryLength          = 80
   [markup.highlight]
     codeFences  = true
     guessSyntax = true
-    style       = "monokai"
+    noClasses   = false                    # 启用 PaperMod 内置 chroma-styles.css，避免内联样式膨胀
     lineNos     = false
     tabWidth    = 2
   [markup.goldmark]
